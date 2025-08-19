@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Kuziini Project Manager v20 — Ghid scurt</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; line-height: 1.35; margin: 24px; }
+  h1 { font-size: 22px; margin-bottom: 0; }
+  h2 { font-size: 18px; margin-top: 22px; }
+  code, pre { background: #f6f8fa; padding: 4px 6px; border-radius: 6px; display: block; }
+  .muted { color: #666; }
+  .block { margin: 12px 0; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 20px 0; }
+</style>
+</head><body>
+<h1>Kuziini Project Manager v20 — Ghid scurt</h1>
+<p class="muted">Versiune document: 2025-08-17 06:48</p>
+<hr/>
+<h2>Structură module (fixă)</h2>
+<ul>
+<li><b>Dashboard</b> — KPI & rezumate execuție</li>
+<li><b>Vedere generală</b> — registru proiecte filtrabil</li>
+<li><b>Secțiuni producție</b> — etape Debitare → CNC → Vopsitorie → Asamblare → Ambalare/Livrare → Montaj</li>
+<li><b>Setări proiect</b> — parametri per proiect</li>
+<li><b>Comandă nouă</b> — introducere rapidă proiect/comandă</li>
+<li><b>Utilizatori & roluri</b> — administrare acces</li>
+<li><b>Profil utilizator</b> — preferințe personale</li>
+<li><b>Diagnoză date</b> — verificări integritate Excel</li>
+</ul>
+<hr/>
+<h2>1) Dashboard</h2><div class='block'><b>Rol:</b> Indicatori cheie ai proiectelor curente: volum, progres, întârzieri, sarcini critice.<br/><b>Funcționare:</b> Afișează KPI în timp real pe baza foii «Proiecte»: total proiecte active, proiecte la risc, progres mediu pe etape și trend-uri. Oferă ancore rapide către proiectele care necesită intervenție.</div><h2>2) Vedere generală</h2><div class='block'><b>Rol:</b> Listă filtrabilă a tuturor proiectelor cu stări, termene și responsabili.<br/><b>Funcționare:</b> Permite filtrare/ordonare după client, termen, status 25/50/75/100 și manager. Servește ca punct de plecare pentru deschiderea fișei de proiect.</div><h2>3) Secțiuni producție</h2><div class='block'><b>Rol:</b> Monitorizează etapele de producție (debitare, CNC, vopsitorie, asamblare, montaj).<br/><b>Funcționare:</b> Oferă vizualizare pe coloane/timeline cu progres pe fiecare fază, blocaje și dependențe. Actualizările se reflectă în KPI și în fișa proiectului.</div><h2>4) Setări proiect</h2><div class='block'><b>Rol:</b> Parametri operaționali per proiect: buget, deadline, manager, priorități.<br/><b>Funcționare:</b> Formular standardizat pentru actualizarea setărilor critice. Persistă în date și alimentează calculele de risc și alertele.</div><h2>5) Comandă nouă</h2><div class='block'><b>Rol:</b> Înregistrează rapid o comandă/proiect cu număr unic și metadate esențiale.<br/><b>Funcționare:</b> Generează identificator («OF-YYYY-NNNN»), setează clientul, dimensiuni, descriere, responsabil și termene. Scrie în foaia «Proiecte» sau într-o foaie dedicată «Comenzi».</div><h2>6) Utilizatori & roluri</h2><div class='block'><b>Rol:</b> Administrare utilizatori, roluri (viewer/manager/owner) și vizibilitate componentelor.<br/><b>Funcționare:</b> Controlează accesul la acțiuni sensibile (ex. modificare setări proiect, exporturi). Opțional: audit minimal al acțiunilor.</div><h2>7) Profil utilizator</h2><div class='block'><b>Rol:</b> Setări personale: limbă, temă, preferințe notificări.<br/><b>Funcționare:</b> Personalizează experiența individuală fără a afecta configurațiile globale ale proiectelor.</div><h2>8) Diagnoză date</h2><div class='block'><b>Rol:</b> Verifică integritatea fișierelor Excel: coloane critice, valori lipsă, anomalii.<br/><b>Funcționare:</b> Rulează controale automate (rânduri/chei lipsă, tipuri neconforme, date depășite). Produce un raport sumar și recomandări de remediere.</div>
+<hr/>
+<h2>Schelet tehnic (orientare rapidă)</h2>
+<ul>
+<li><b>Entrypoint:</b> <code>streamlit_app.py</code> (router + sidebar)</li>
+<li><b>Module UI:</b> <code>containers/</code></li>
+<li><b>Servicii date:</b> <code>utils/data_loader.py</code></li>
+<li><b>Resurse:</b> <code>assets/</code> (logo), <code>data/</code> (Excel)</li>
+<li><b>Temă:</b> <code>.streamlit/config.toml</code></li>
+<li><b>Dependențe:</b> <code>requirements.txt</code></li>
+</ul>
+<pre>[UI Sidebar] → [Router] → [containers/*] → [utils/data_loader] → [Excel]
+           ↘ KPI / Secțiuni / Setări / Users ↙</pre>
+<hr/>
+<p class="muted">Notă: Structura generală rămâne neschimbată până la o decizie explicită de redesign.</p>
+</body></html>

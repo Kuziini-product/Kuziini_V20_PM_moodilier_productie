@@ -1,292 +1,310 @@
-
+# utils/data_loader.py
 from __future__ import annotations
-import os, re, glob
+"""
+Data Loader unificat pentru Project Planner v20.
+
+– NU face aritmetică pe 'id' (evită TypeError).
+– Parsează date ISO (YYYY-MM-DD) fără warnings (cu fallback tolerant).
+– Garantează coloanele standard pentru «Proiecte» și «Personal».
+– Expune clasa **AppData** (cum o importă aplicația) + alias **DataLoader = AppData**.
+– Alias-uri: **data.users** (=> personal).
+– **diagnostics()** este METODĂ (apelabilă) + proprietate **diagnostics_data** dacă vrei dict direct.
+"""
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional, Union, Any
+
 import pandas as pd
-from datetime import timedelta, date
-from typing import Dict, List, Any, Optional, Tuple
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+# --- Căi & foi ----------------------------------------------------------------
+APP_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = APP_ROOT / "data"
 
-def _split_list(s: str) -> List[str]:
-    if not isinstance(s, str): return []
-    parts = re.split(r"[;,/|]+", s)
-    return [p.strip() for p in parts if p.strip()]
+PROJECTS_XLSX = DATA_DIR / "proiecte.xlsx"
+PERSONAL_XLSX = DATA_DIR / "personal.xlsx"
 
-def _parse_money(x: Any) -> Optional[float]:
-    if x is None or (isinstance(x, float) and pd.isna(x)): return None
-    if isinstance(x, (int, float)): return float(x)
-    s = str(x).strip()
-    if not s: return None
-    s = re.sub(r"[^\d,.-]", "", s)
-    if "," in s and "." in s:
-        s = s.replace(".", "").replace(",", ".")
-    elif "," in s:
-        s = s.replace(",", ".")
+SHEET_PROJECTS = "Proiecte"
+SHEET_PERSONAL = "Personal"
+
+# --- Nomenclator secții -------------------------------------------------------
+SECTIONS: List[str] = [
+    "Ofertare",
+    "Proiectare & Design",
+    "Tehnologică",
+    "Achiziții",
+    "CNC",
+    "Debitare",
+    "Furnir",
+    "Pregătire vopsitorie",
+    "Vopsitorie",
+    "Asamblare",
+    "CTC",
+    "Ambalare",
+    "Transport (Livrare)",
+    "Montaj",
+]
+
+# --- Ordine/coloane standard --------------------------------------------------
+PROJECT_COLS_ORDER: List[str] = [
+    "id", "name", "company",
+    "contact_name", "contact_email", "contact_phone",
+    "address", "floor", "install_contact",
+    "responsible", "participants",
+    "value",
+    "inst1", "inst2", "inst3", "inst4",
+    "inst1_amount", "inst2_amount", "inst3_amount", "inst4_amount",
+    "sections", "sections_progress", "section_deadlines",
+    "progress_overall", "status",
+    "start", "end",
+    "notes",
+]
+
+PERSON_COLS_ORDER: List[str] = [
+    "name", "email", "phone", "role", "section", "is_primary",
+]
+
+# --- Utilitare interne ---------------------------------------------------------
+def _safe_read_excel(path: Path, sheet: str) -> pd.DataFrame:
     try:
-        return float(s)
+        return pd.read_excel(path, sheet_name=sheet, engine="openpyxl")
     except Exception:
-        return None
+        return pd.DataFrame()
 
-def _parse_pct(x: Any) -> Optional[float]:
-    if x is None or (isinstance(x, float) and pd.isna(x)): return None
-    if isinstance(x, (int, float)): return float(x)
-    s = str(x).strip()
-    if not s: return None
-    s = s.replace("%","").replace(",", ".")
-    try:
-        return float(s)
-    except Exception:
-        return None
+def ensure_project_columns(df: pd.DataFrame) -> pd.DataFrame:
+    for c in PROJECT_COLS_ORDER:
+        if c not in df.columns:
+            df[c] = None
+    return df
 
-def _parse_kv_list(s: str) -> Dict[str, float]:
-    if not isinstance(s, str): return {}
-    items = re.split(r"[;,]+", s)
-    out: Dict[str, float] = {}
-    for it in items:
-        if "=" in it:
-            k, v = it.split("=", 1)
-        elif ":" in it:
-            k, v = it.split(":", 1)
-        else:
+def ensure_person_columns(df: pd.DataFrame) -> pd.DataFrame:
+    for c in PERSON_COLS_ORDER:
+        if c not in df.columns:
+            df[c] = None
+    return df
+
+def _parse_date_iso(series: pd.Series) -> pd.Series:
+    # Întâi încercăm strict ISO
+    s = pd.to_datetime(series, errors="coerce", format="%Y-%m-%d")
+    # Fallback tolerant dacă în celule apar alte formate
+    mask = s.isna() & series.notna()
+    if mask.any():
+        s2 = pd.to_datetime(series[mask], errors="coerce", dayfirst=True)
+        s.loc[mask] = s2
+    return s.dt.date
+
+def _normalize_projects(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        df = pd.DataFrame(columns=PROJECT_COLS_ORDER)
+    df = ensure_project_columns(df.copy())
+
+    # id ca string (NU facem aritmetică pe el)
+    df["id"] = df["id"].apply(lambda v: None if pd.isna(v) else str(v).strip())
+
+    # text
+    for c in [
+        "name","company","contact_name","contact_email","contact_phone",
+        "address","install_contact","responsible","participants",
+        "sections","sections_progress","section_deadlines","notes",
+    ]:
+        df[c] = df[c].astype(str).where(~df[c].isna(), None)
+        df[c] = df[c].apply(lambda v: None if v in {"nan","None"} else v)
+
+    # numeric
+    df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    df["status"] = pd.to_numeric(df["status"], errors="coerce")
+    df["progress_overall"] = pd.to_numeric(df["progress_overall"], errors="coerce")
+    for c in ("inst1_amount","inst2_amount","inst3_amount","inst4_amount"):
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # flags tranșe ('da'/'nu')
+    for c in ("inst1","inst2","inst3","inst4"):
+        if c in df.columns:
+            df[c] = df[c].apply(lambda v: "da" if str(v).strip().lower() in {"1","true","da","yes"} else "nu")
+
+    df["floor"] = pd.to_numeric(df["floor"], errors="coerce").astype("Int64")
+
+    # date
+    df["start"] = _parse_date_iso(df["start"])
+    df["end"]   = _parse_date_iso(df["end"])
+
+    return df[PROJECT_COLS_ORDER]
+
+def _normalize_personal(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        df = pd.DataFrame(columns=PERSON_COLS_ORDER)
+    df = ensure_person_columns(df.copy())
+
+    for c in ("name","email","role","section"):
+        df[c] = df[c].astype(str).str.strip()
+    df["phone"] = df["phone"].astype(str).str.strip()
+    df["is_primary"] = pd.to_numeric(df["is_primary"], errors="coerce").fillna(0).astype(int)
+
+    return df[PERSON_COLS_ORDER]
+
+# --- Parseri utili pe proiect -------------------------------------------------
+def split_sections(sections_field: Union[str, float, None]) -> List[str]:
+    if pd.isna(sections_field) or not str(sections_field).strip():
+        return []
+    raw = [s.strip() for s in str(sections_field).split(",") if s.strip()]
+    return [s for s in SECTIONS if s in raw]
+
+def parse_section_progress(progress_field: Union[str, float, None]) -> List[int]:
+    if pd.isna(progress_field) or not str(progress_field).strip():
+        return []
+    vals: List[int] = []
+    for x in str(progress_field).split(","):
+        x = x.strip()
+        if not x:
             continue
-        p = _parse_pct(v)
-        if p is not None:
-            out[k.strip()] = p
+        try:
+            vals.append(int(float(x)))
+        except Exception:
+            vals.append(0)
+    return vals
+
+def parse_section_deadlines(deadlines_field: Union[str, float, None]) -> Dict[str, Optional[pd.Timestamp]]:
+    out: Dict[str, Optional[pd.Timestamp]] = {}
+    if pd.isna(deadlines_field) or not str(deadlines_field).strip():
+        return out
+    parts = [p.strip() for p in str(deadlines_field).split(";") if p.strip()]
+    for p in parts:
+        if ":" not in p:
+            continue
+        sec, d = p.split(":", 1)
+        out[sec.strip()] = pd.to_datetime(d.strip(), errors="coerce")
     return out
 
-# ---------- Auto-detection helpers ----------
-def _score_projects_header(cols: List[str]) -> int:
-    keys = ["proiect","compan","persoan","email","etaj","valoare","transa","tranșa","dispunere","progres","start","final","dead"]
-    s = 0
-    low = [c.lower() for c in cols]
-    for k in keys:
-        if any(k in c for c in low): s += 1
-    return s
+def filter_projects_by_section(df: pd.DataFrame, section: str) -> pd.DataFrame:
+    if not section:
+        return df
+    return df[df["sections"].astype(str).str.contains(section, regex=False, na=False)].copy()
 
-def _score_users_header(cols: List[str]) -> int:
-    keys = ["nume","email","sec","respons","rol"]
-    s = 0
-    low = [c.lower() for c in cols]
-    for k in keys:
-        if any(k in c for c in low): s += 1
-    return s
-
-def _pick_best_sheet(xl: pd.ExcelFile, mode: str) -> str:
-    best_name, best_score = xl.sheet_names[0], -1
-    for sh in xl.sheet_names:
-        try:
-            tmp = xl.parse(sheet_name=sh, nrows=3)
-            cols = list(tmp.columns)
-            score = _score_projects_header(cols) if mode=="projects" else _score_users_header(cols)
-            if score > best_score:
-                best_score, best_name = score, sh
-        except Exception:
-            continue
-    return best_name
-
-def _find_excel_path(kind: str) -> Tuple[Optional[str], Optional[str]]:
-    """Return (file_path, sheet_name). kind in {'projects','users'}"""
-    if not os.path.isdir(DATA_DIR):
-        return None, None
-    files = glob.glob(os.path.join(DATA_DIR, "*.xlsx"))
-    # preferred name hints
-    if kind == "projects":
-        prefer = ["proiect", "project", "proiecte"]
-    else:
-        prefer = ["personal", "users", "utilizator", "utilizatori"]
-    # try prefer first
-    ranked = sorted(files, key=lambda p: 0 if any(h in os.path.basename(p).lower() for h in prefer) else 1)
-    for path in ranked if ranked else files:
-        try:
-            xl = pd.ExcelFile(path, engine="openpyxl")
-            sheet = _pick_best_sheet(xl, "projects" if kind=="projects" else "users")
-            return path, sheet
-        except Exception:
-            continue
-    return (files[0], None) if files else (None, None)
+# --- Clasa cerută de app: AppData (cu alias DataLoader) -----------------------
+@dataclass
+class _Cache:
+    projects: Optional[pd.DataFrame] = None
+    personal: Optional[pd.DataFrame] = None
 
 class AppData:
-    def __init__(self):
-        self._users: Optional[pd.DataFrame] = None
-        self._projects: Optional[pd.DataFrame] = None
-        self.last_notes: List[str] = []
+    """Loader cu cache intern; folosit în tot proiectul."""
+    def __init__(self) -> None:
+        self._cache = _Cache()
 
-    def _note(self, msg: str) -> None:
-        self.last_notes.append(msg)
-
-    # USERS
-    @property
-    def users(self) -> pd.DataFrame:
-        if self._users is None:
-            self._users = self._load_users()
-        return self._users
-
-    def _load_users(self) -> pd.DataFrame:
-        fpath, sheet = _find_excel_path("users")
-        df = pd.DataFrame()
-        if fpath:
-            try:
-                df = pd.read_excel(fpath, sheet_name=sheet, engine="openpyxl")
-                self._note(f"Loaded {os.path.basename(fpath)} (sheet: {sheet}) — {df.shape[0]} rânduri.")
-            except Exception as e:
-                self._note(f"Eroare citire {os.path.basename(fpath)}: {e!r}. Folosesc demo.")
-        else:
-            self._note("Nu am găsit fișierul de utilizatori în /data (ex: personal.xlsx). Folosesc demo.")
-        if df.empty:
-            df = pd.DataFrame([
-                {"Nume":"Ana Ionescu","Email":"ana@kuziini.ro","Secție":"Proiectare","Responsabil":1,"Rol":"owner"},
-                {"Nume":"Mihai Pop","Email":"mihai@kuziini.ro","Secție":"Producție","Responsabil":1,"Rol":"project_manager"},
-                {"Nume":"Ioana Dinu","Email":"ioana@kuziini.ro","Secție":"Montaj","Responsabil":0,"Rol":"user"},
-            ])
-
-        rename = {}
-        for col in df.columns:
-            low = str(col).strip().lower()
-            if low.startswith("nume"): rename[col] = "name"
-            elif "email" in low: rename[col] = "email"
-            elif "sec" in low: rename[col] = "section"
-            elif "respons" in low: rename[col] = "responsible"
-            elif "rol" in low: rename[col] = "role"
-        df = df.rename(columns=rename)
-        for need in ["name","email","section","responsible","role"]:
-            if need not in df.columns:
-                df[need] = "" if need not in ("responsible",) else 0
-        def _to01(x):
-            s = str(x).strip().lower()
-            return 1 if s in ("1","01","true","x","da","y") else 0
-        df["responsible"] = df["responsible"].map(_to01)
-        df = df.reset_index(drop=True).reset_index().rename(columns={"index":"id"})
-        df["id"] += 1
-        return df[["id","name","email","section","responsible","role"]]
-
-    # PROJECTS
     @property
     def projects(self) -> pd.DataFrame:
-        if self._projects is None:
-            self._projects = self._load_projects()
-        return self._projects
+        if self._cache.projects is None:
+            self._cache.projects = self._load_projects()
+        return self._cache.projects
 
-    def _load_projects(self) -> pd.DataFrame:
-        fpath, sheet = _find_excel_path("projects")
-        df = pd.DataFrame()
-        if fpath:
-            try:
-                df = pd.read_excel(fpath, sheet_name=sheet, engine="openpyxl")
-                self._note(f"Loaded {os.path.basename(fpath)} (sheet: {sheet}) — {df.shape[0]} rânduri.")
-            except Exception as e:
-                self._note(f"Eroare citire {os.path.basename(fpath)}: {e!r}. Folosesc demo.")
-        else:
-            self._note("Nu am găsit fișierul de proiecte în /data (ex: proiecte.xlsx). Folosesc demo.")
+    @property
+    def personal(self) -> pd.DataFrame:
+        if self._cache.personal is None:
+            self._cache.personal = self._load_personal()
+        return self._cache.personal
 
-        if df.empty:
-            today = date.today()
-            df = pd.DataFrame([{
-                "Proiect":"Magazin Avestor", "Companie":"Avestor SRL", "Persoană de contact":"Maria Ionescu", "Email":"maria@client.ro",
-                "Etaj":0, "Valoare":50000, "Tranșa1":50, "Tranșa2":25, "Tranșa3":20, "Tranșa4":5,
-                "Dispunere pe secții":"Proiectare, Producție, Montaj", "Progres secții":"Proiectare=80; Producție=40; Montaj=0",
-                "Start": today, "Final": today, "Status":"in_progress"
-            }])
+    # Alias compatibil cerut de Dashboard: data.users
+    @property
+    def users(self) -> pd.DataFrame:
+        return self.personal
 
-        # normalize header
-        rename = {}
-        for col in df.columns:
-            low = str(col).lower()
-            sec_keys = ("secț", "secti", "sectie", "sectii", "sect")
-            def has_sec_kw(s: str) -> bool: return any(k in s for k in sec_keys)
+    # Proprietate pentru citire directă (fără paranteze), dacă e nevoie
+    @property
+    def diagnostics_data(self) -> Dict[str, Any]:
+        return self._compute_diagnostics()
 
-            if low.startswith("proiect"): rename[col] = "name"
-            elif "compan" in low: rename[col] = "company"
-            elif "persoan" in low: rename[col] = "contact_name"
-            elif "email" in low: rename[col] = "contact_email"
-            elif "etaj" in low: rename[col] = "floor"
-            elif "valoare" in low: rename[col] = "value"
-            elif ("dispunere" in low) or (has_sec_kw(low) and "prog" not in low): rename[col] = "sections_raw"
-            elif ("progres" in low) and has_sec_kw(low): rename[col] = "sections_progress_raw"
-            elif re.search(r"(tran[șs]?a|transa)\s*1|(^|[^0-9])50($|[^0-9])", low): rename[col] = "inst1"
-            elif re.search(r"(tran[șs]?a|transa)\s*2|(^|[^0-9])25($|[^0-9])", low): rename[col] = "inst2"
-            elif re.search(r"(tran[șs]?a|transa)\s*3|(^|[^0-9])20($|[^0-9])", low): rename[col] = "inst3"
-            elif re.search(r"(tran[șs]?a|transa)\s*4|(^|[^0-9])5($|[^0-9])",  low): rename[col] = "inst4"
-            elif low.startswith("start") or "data start" in low: rename[col] = "start"
-            elif "final" in low or "dead" in low or "sfâr" in low or "sfars" in low: rename[col] = "end"
-            elif "status" in low: rename[col] = "status"
-        df = df.rename(columns=rename)
-
-        # ensure required
-        for need in ["name","company","contact_name","contact_email","floor","value","inst1","inst2","inst3","inst4","sections_raw","sections_progress_raw"]:
-            if need not in df.columns:
-                df[need] = None
-
-        # value & installments
-        df["value"] = df["value"].map(_parse_money)
-        for k in ["inst1","inst2","inst3","inst4"]:
-            df[k] = df[k].map(_parse_pct)
-
-        # sections list + progress mapping
-        sec_names, sec_prog = [], []
-        for _, r in df.iterrows():
-            names = _split_list(r.get("sections_raw",""))
-            prog_raw = r.get("sections_progress_raw","")
-            pmap = _parse_kv_list(prog_raw)
-            if not pmap and isinstance(prog_raw, str):
-                nums = [p for p in re.split(r"[;,/|]+", prog_raw) if p.strip()]
-                vals = [_parse_pct(n) for n in nums]
-                if names and vals and len([v for v in vals if v is not None]) == len(names):
-                    pmap = {n:v for n,v in zip(names, vals)}
-            sec_names.append(names)
-            sec_prog.append(pmap)
-        df["sections"] = sec_names
-        df["sections_progress"] = sec_prog
-
-        # amounts per instalment
-        def _amount(pct, total):
-            try:
-                if pct is None or total is None: return None
-                return round(float(total) * float(pct) / 100.0, 2)
-            except Exception: return None
-        df["inst1_amount"] = df.apply(lambda r: _amount(r["inst1"], r["value"]), axis=1)
-        df["inst2_amount"] = df.apply(lambda r: _amount(r["inst2"], r["value"]), axis=1)
-        df["inst3_amount"] = df.apply(lambda r: _amount(r["inst3"], r["value"]), axis=1)
-        df["inst4_amount"] = df.apply(lambda r: _amount(r["inst4"], r["value"]), axis=1)
-
-        # overall progress
-        def _overall(pmap: Dict[str, float]) -> Optional[float]:
-            vals = list((pmap or {}).values())
-            return round(sum(vals)/len(vals), 1) if vals else None
-        df["progress_overall"] = df["sections_progress"].apply(_overall)
-
-        # dates
-        if "start" in df.columns:
-            df["start"] = pd.to_datetime(df["start"], errors="coerce", dayfirst=True).dt.date
-        else:
-            df["start"] = None
-        if "end" in df.columns:
-            df["end"] = pd.to_datetime(df["end"], errors="coerce", dayfirst=True).dt.date
-        else:
-            df["end"] = None
-        if "status" not in df.columns:
-            df["status"] = None
-
-        df = df.reset_index(drop=True).reset_index().rename(columns={"index":"id"})
-        df["id"] += 100
-
-        cols = ["id","name","company","contact_name","contact_email","floor","value",
-                "inst1","inst2","inst3","inst4","inst1_amount","inst2_amount","inst3_amount","inst4_amount",
-                "sections","sections_progress","progress_overall","start","end","status"]
-        return df[cols]
-
-    def get_responsibles_by_section(self) -> Dict[str, list]:
-        df = self.users
-        d: Dict[str, list] = {}
-        for _, r in df.iterrows():
-            if r["responsible"] == 1:
-                d.setdefault(r["section"], []).append(r["name"])
-        return d
-
+    # *** IMPORTANT: metoda apelabilă așteptată de sidebar ***
     def diagnostics(self) -> Dict[str, Any]:
-        return {
-            "notes": self.last_notes,
-            "users_rows": int(self.users.shape[0]),
-            "projects_rows": int(self.projects.shape[0]),
-            "users_columns": list(self.users.columns),
-            "projects_columns": list(self.projects.columns),
+        return self._compute_diagnostics()
+
+    # Alias dacă e apelată altfel
+    def get_diagnostics(self) -> Dict[str, Any]:
+        return self._compute_diagnostics()
+
+    def refresh(self) -> None:
+        self._cache = _Cache()
+
+    # --- intern ---------------------------------------------------------------
+    def _load_projects(self) -> pd.DataFrame:
+        df = _safe_read_excel(PROJECTS_XLSX, SHEET_PROJECTS)
+        return _normalize_projects(df)
+
+    def _load_personal(self) -> pd.DataFrame:
+        df = _safe_read_excel(PERSONAL_XLSX, SHEET_PERSONAL)
+        return _normalize_personal(df)
+
+    def _compute_diagnostics(self) -> Dict[str, Any]:
+        """Agregă informațiile folosite în panoul din stânga."""
+        try:
+            logo_ok = (APP_ROOT / "assets" / "logo.png").exists()
+        except Exception:
+            logo_ok = False
+
+        proj_ok = PROJECTS_XLSX.exists()
+        pers_ok = PERSONAL_XLSX.exists()
+
+        dfp = self.projects
+        dfu = self.personal
+
+        # KPI ușoare
+        today = pd.Timestamp.today()
+        start_dt = pd.to_datetime(dfp.get("start"), errors="coerce") if not dfp.empty else pd.Series([], dtype="datetime64[ns]")
+        end_dt   = pd.to_datetime(dfp.get("end"), errors="coerce") if not dfp.empty else pd.Series([], dtype="datetime64[ns]")
+        active = int(((start_dt <= today) & (end_dt >= today)).sum()) if not dfp.empty else 0
+
+        sections_active = 0
+        if not dfp.empty and "sections" in dfp.columns:
+            tokens = {s.strip() for row in dfp["sections"].fillna("") for s in str(row).split(",") if s.strip()}
+            sections_active = len(tokens)
+
+        missing_proj_crit = [c for c in ["id","name","company","value","start","end","status","progress_overall"] if c not in dfp.columns]
+        diagnostics = {
+            "cwd": str(APP_ROOT),
+            "files": {
+                "assets/logo.png": logo_ok,
+                "data/proiecte.xlsx": proj_ok,
+                "data/personal.xlsx": pers_ok,
+            },
+            "counts": {
+                "projects_rows": int(len(dfp)),
+                "users_rows": int(len(dfu)),
+                "projects_active_now": active,
+                "sections_active": sections_active,
+            },
+            "project_missing_critical_cols": missing_proj_crit,
         }
+        return diagnostics
+
+# alias de compatibilitate
+DataLoader = AppData
+data = AppData()  # singleton
+
+# --- Alias-uri funcționale ----------------------------------------------------
+def get_projects() -> pd.DataFrame:
+    return data.projects
+
+def get_personal() -> pd.DataFrame:
+    return data.personal
+
+def get_users() -> pd.DataFrame:
+    return data.users
+
+def reload_data() -> None:
+    data.refresh()
+
+# --- KPI simple ---------------------------------------------------------------
+def kpi_summary(df: pd.DataFrame) -> Dict[str, Union[int, float]]:
+    if df.empty:
+        return {"count": 0, "progress_avg": 0.0, "value_sum": 0.0, "active_now": 0}
+    today = pd.Timestamp.today()
+    progress_avg = float(pd.to_numeric(df["progress_overall"], errors="coerce").mean(skipna=True) or 0.0)
+    value_sum = float(pd.to_numeric(df["value"], errors="coerce").sum(skipna=True) or 0.0)
+    start_dt = pd.to_datetime(df["start"], errors="coerce")
+    end_dt = pd.to_datetime(df["end"], errors="coerce")
+    active = ((start_dt <= today) & (end_dt >= today)).sum()
+    return {
+        "count": int(len(df)),
+        "progress_avg": round(progress_avg, 1),
+        "value_sum": round(value_sum, 2),
+        "active_now": int(active),
+    }

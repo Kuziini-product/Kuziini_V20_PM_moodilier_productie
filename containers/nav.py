@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import Dict, Any
 import streamlit as st
+from utils.sidebar_help import render_sidebar_help
 from datetime import datetime
 import os, base64, glob
 
@@ -113,3 +114,16 @@ def _account_panel(ctx: Dict[str, Any]):
     if c2.button("Logout"):
         st.session_state.user = {"email": "guest@kuziini.ro", "display_name": "Vizitator", "role": "viewer"}
         st.rerun()
+
+
+# --- Kuziini helper sidebar (auto) ---
+try:
+    _active = None
+    # try common session keys
+    for _k in ("route","page","active_page","active_tab","active_section","current_view"):
+        if _k in st.session_state and isinstance(st.session_state[_k], str):
+            _active = st.session_state[_k]
+            break
+    render_sidebar_help(_active)
+except Exception:
+    pass

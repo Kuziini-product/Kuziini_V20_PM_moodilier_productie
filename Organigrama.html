@@ -1,0 +1,32 @@
+
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Organigrama Kuziini</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 24px; }
+h1 { font-size: 22px; }
+.tree ul { padding-left: 1.2em; list-style: "↳ "; }
+.badge { display:inline-block; padding:2px 6px; border:1px solid #999; border-radius:6px; margin:2px; }
+small { color:#666; }
+</style></head>
+<body>
+<h1>Organigrama & flux (v20)</h1>
+<p><small>Flux vertical până la CNC, apoi ramificații orizontale (secțiuni paralele). Duratele sunt normative și pot fi ajustate.</small></p>
+<div class="tree">
+<ul>
+<li><span class="badge">1. Ofertare</span></li>
+<li><span class="badge">2. Proiectare & Design</span></li>
+<li><span class="badge">3. Tehnologică</span></li>
+<li><span class="badge">4. Achiziții</span></li>
+<li><span class="badge">5. CNC</span> — punct de ramificare
+  <ul>
+    <li><span class="badge">Furnir</span></li>
+    <li><span class="badge">Pregătire vopsitorie</span> → <span class="badge">Vopsitorie</span></li>
+    <li><span class="badge">Asamblare</span></li>
+    <li><span class="badge">CTC</span></li>
+    <li><span class="badge">Ambalare</span> → <span class="badge">Transport (Livrare)</span> → <span class="badge">Montaj</span></li>
+  </ul>
+</li>
+</ul>
+</div>
+<p><small>Responsabilul principal al fiecărei secții este marcat în «Personal» cu is_primary=1 (autocomplete în comenzi).</small></p>
+</body></html>

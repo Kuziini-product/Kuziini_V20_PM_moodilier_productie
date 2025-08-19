@@ -1,0 +1,98 @@
+{
+  "dashboard": {
+    "title": "Dashboard",
+    "desc": "Indicatori cheie: volum, progres, întârzieri, sarcini critice."
+  },
+  "overview": {
+    "title": "Vedere generală",
+    "desc": "Registru proiecte filtrabil. Deschide fișa proiect."
+  },
+  "sections": {
+    "title": "Secțiuni producție",
+    "desc": "Monitorizare etape și progres pe secții."
+  },
+  "project_settings": {
+    "title": "Setări proiect",
+    "desc": "Buget, termene, priorități, manager."
+  },
+  "new_order": {
+    "title": "Comandă nouă",
+    "desc": "Introdu proiect nou. Autocomplete responsabil + co-participanți."
+  },
+  "users": {
+    "title": "Utilizatori & roluri",
+    "desc": "Administrare roluri și acces."
+  },
+  "profile": {
+    "title": "Profil utilizator",
+    "desc": "Preferințe personale."
+  },
+  "data_check": {
+    "title": "Diagnoză date",
+    "desc": "Integritate Excel + recomandări."
+  },
+  "—": {
+    "title": "—",
+    "desc": ""
+  },
+  "sec_Ofertare": {
+    "title": "Secția: Ofertare",
+    "desc": "Durată normată: 2 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Proiectare & Design": {
+    "title": "Secția: Proiectare & Design",
+    "desc": "Durată normată: 3 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Tehnologică": {
+    "title": "Secția: Tehnologică",
+    "desc": "Durată normată: 2 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Achiziții": {
+    "title": "Secția: Achiziții",
+    "desc": "Durată normată: 3 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_CNC": {
+    "title": "Secția: CNC",
+    "desc": "Durată normată: 3 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Debitare": {
+    "title": "Secția: Debitare",
+    "desc": "Durată normată: 2 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Furnir": {
+    "title": "Secția: Furnir",
+    "desc": "Durată normată: 4 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Pregătire vopsitorie": {
+    "title": "Secția: Pregătire vopsitorie",
+    "desc": "Durată normată: 2 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Vopsitorie": {
+    "title": "Secția: Vopsitorie",
+    "desc": "Durată normată: 3 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Asamblare": {
+    "title": "Secția: Asamblare",
+    "desc": "Durată normată: 4 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_CTC": {
+    "title": "Secția: CTC",
+    "desc": "Durată normată: 1 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Ambalare": {
+    "title": "Secția: Ambalare",
+    "desc": "Durată normată: 1 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Transport (Livrare)": {
+    "title": "Secția: Transport (Livrare)",
+    "desc": "Durată normată: 1 zile. Responsabil principal: definit în «Personal»."
+  },
+  "sec_Montaj": {
+    "title": "Secția: Montaj",
+    "desc": "Durată normată: 2 zile. Responsabil principal: definit în «Personal»."
+  },
+  "org": {
+    "title": "Organigramă",
+    "desc": "Vezi schema fluxului în Organigrama (fișier HTML)."
+  }
+}
